@@ -1,0 +1,10 @@
+{
+  "name": "alien-eggs",
+  "version": "0.12.0",
+  "title": "Alien Eggs",
+  "author": "Sparr",
+  "homepage": "http://github.com/sparr/factorio-mod-alien-eggs",
+  "contact": "sparr0@gmail.com",
+  "description": "Alien artifacts are actually alien eggs! Deal with them before they hatch.",
+  "dependencies": ["base >= 0.12.33"]
+}
