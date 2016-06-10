@@ -4,8 +4,8 @@ if not defines then
     require 'defines'
 end
 
-local egg_polling_delay = math.max(egg_polling_delay_secs,1)*60
-local polling_remainder = math.random(egg_polling_delay)-1
+local artifact_polling_delay = math.max(artifact_polling_delay_secs,1)*60
+local polling_remainder = math.random(artifact_polling_delay)-1
 
 -- local function debug(...)
 --   if game.players[1] then
@@ -51,8 +51,8 @@ local function maybe_hatch(entity,loot_name,probability)
     } then
       -- debug("hatched "..loot_to_entity[loot_name].entity.." at "..pos2s(entity.position))
       local area = {
-        {entity.position.x-egg_clearing_radius, entity.position.y-egg_clearing_radius}, 
-        {entity.position.x+egg_clearing_radius, entity.position.y+egg_clearing_radius}
+        {entity.position.x-artifact_clearing_radius, entity.position.y-artifact_clearing_radius}, 
+        {entity.position.x+artifact_clearing_radius, entity.position.y+artifact_clearing_radius}
       }
       for _, ent in pairs(entity.surface.find_entities_filtered{area=area,name="item-on-ground"}) do
         if ent.valid then ent.destroy() end
@@ -62,7 +62,7 @@ local function maybe_hatch(entity,loot_name,probability)
 end
 
 local function onTick(event)
-  if event.tick%egg_polling_delay == polling_remainder then
+  if event.tick%artifact_polling_delay == polling_remainder then
 
     -- initialization code, runs once
     if not loot_to_entity then
@@ -89,10 +89,10 @@ local function onTick(event)
       if entity.valid then
         if loot_to_entity[entity.stack.name] then
           -- direct loot hatches as expected
-          maybe_hatch(entity,entity.stack.name,egg_hatching_chance)
+          maybe_hatch(entity,entity.stack.name,artifact_hatching_chance)
         elseif loot_to_entity['small-' .. entity.stack.name] then
           -- if nothing drops this loot, see if something drops the small version, and spawn that a bit quicker
-          maybe_hatch(entity,'small-' .. entity.stack.name,1-((1-egg_hatching_chance)^2))
+          maybe_hatch(entity,'small-' .. entity.stack.name,1-((1-artifact_hatching_chance)^2))
         end
       end
     end
