@@ -1,9 +1,5 @@
 require "config"
 
-if not defines then
-    require 'defines'
-end
-
 local artifact_polling_delay = math.max(artifact_polling_delay_secs,1)*60
 local polling_remainder = math.random(artifact_polling_delay)-1
 
@@ -33,23 +29,42 @@ local function find_all_entities(args)
         for _, ent in pairs(surface.find_entities_filtered(args)) do
             entities[#entities+1] = ent
         end
-        -- debug("checked chunk during initialisation")
     end
   end
   return entities
 end
 
 local loot_to_entity
+local evo_spawn
 
 local function maybe_hatch(entity,loot_name,probability)
   if math.random() < probability then
+    -- list of biters that can spawn right now and can drop this loot, with their spawn weight/probability
+    local total_weight = 0
+    local can_spawn = {}
+    for entity_name,entity_weight in pairs(loot_to_entity[loot_name]) do
+      if evo_spawn[entity_name] and evo_spawn[entity_name]>0 then
+        can_spawn[entity_name] = evo_spawn[entity_name] * entity_weight
+        total_weight = total_weight + evo_spawn[entity_name] * entity_weight
+      end
+    end
+    -- pick one of those biters at random, weighted
+    local target = math.random() * total_weight
+    local picked
+    for name,weight in pairs(can_spawn) do
+      if target < weight then
+        picked = name
+        break
+      end
+      target = target - weight
+    end
     -- hatch it!
     if entity.surface.create_entity{
-      name=loot_to_entity[loot_name].entity,
+      name=picked,
       position=entity.position,
       force='enemy'
     } then
-      -- debug("hatched "..loot_to_entity[loot_name].entity.." at "..pos2s(entity.position))
+      -- debug("hatched "..picked.." at "..pos2s(entity.position))
       local area = {
         {entity.position.x-artifact_clearing_radius, entity.position.y-artifact_clearing_radius}, 
         {entity.position.x+artifact_clearing_radius, entity.position.y+artifact_clearing_radius}
@@ -65,21 +80,64 @@ local function onTick(event)
   if event.tick%artifact_polling_delay == polling_remainder then
 
     -- initialization code, runs once
+    -- make a mapping from each loot item to how likely each entity name is to drop it
     if not loot_to_entity then
       loot_to_entity = {}
-      -- figure out the weakest enemy that can drop each loot
-      -- to be used to hatch loot back into enemies later
       for name,entity in pairs(game.entity_prototypes) do
-        -- <400 health is a hack until we get access to evolution spawn factors
-        if entity.type == "unit" and entity.max_health < 400 then
+        if entity.type == "unit" then
           if entity.loot then
             for _,loot in pairs(entity.loot) do
               if string.find(loot.item, 'alien%-artifact') then
-                if (not loot_to_entity[loot.item]) or entity.max_health < loot_to_entity[loot.item].max_health then
-                  loot_to_entity[loot.item] = {max_health=entity.max_health,entity=name}
+                if not loot_to_entity[loot.item] then
+                  loot_to_entity[loot.item] = {}
+                end
+                if loot_to_entity[loot.item][name] then
+                  loot_to_entity[loot.item][name] =
+                    loot_to_entity[loot.item][name] + 
+                    loot.probability * (loot.count_min + loot.count_max) / 2
+                else
+                  loot_to_entity[loot.item][name] =
+                    loot.probability * (loot.count_min + loot.count_max) / 2
                 end
               end
             end
+          end
+        end
+      end
+    end
+
+    -- make a list of what can spawn at the current evolution factor
+    evo_spawn = {}
+    local evo = game.evolution_factor
+    for _,entity in pairs(game.entity_prototypes) do
+      if entity.type == "unit-spawner" then
+        for _,usd in pairs(entity.result_units) do
+          local low_e, low_w, w
+          -- spawn_points is a list of {evolution_factor,weight} coords to be interpolated between
+          for _,spawn_point in pairs(usd.spawn_points) do
+            if spawn_point.evolution_factor == evo then
+              -- perfect match
+              w = spawn_point.weight
+              break
+            elseif low_e then
+              -- we already found the entry below our target
+              -- interpolate from there toward this entry, stop at our target
+              w = low_w + 
+                (spawn_point.weight - low_w) * 
+                ( (evo - low_e) / (spawn_point.evolution_factor - low_e) )
+              break
+            else
+              low_e = spawn_point.evolution_factor
+              low_w = spawn_point.weight
+            end
+          end
+          if not w then
+            w = low_w
+          end
+          if not evo_spawn[usd.unit] then
+            evo_spawn[usd.unit] = w
+          else
+            evo_spawn[usd.unit] = evo_spawn[usd.unit] + w
           end
         end
       end
