@@ -1,5 +1,7 @@
 require "config"
 
+local hatch = require("lib.hatch")
+
 local artifact_polling_delay = math.max(artifact_polling_delay_secs,1)*60
 
 --- Which tick of each cycle the poll lands on, so that not every save checks on the same
@@ -56,33 +58,8 @@ local function spawnable_on(surface)
   for _,entity in pairs(prototypes.entity) do
     if entity.type == "unit-spawner" then
       for _,usd in pairs(entity.result_units) do
-        local low_e, low_w, w
-        -- spawn_points is a list of {evolution_factor,weight} coords to be interpolated between
-        for _,spawn_point in pairs(usd.spawn_points) do
-          if spawn_point.evolution_factor == evo then
-            -- perfect match
-            w = spawn_point.weight
-            break
-          elseif low_e then
-            -- we already found the entry below our target
-            -- interpolate from there toward this entry, stop at our target
-            w = low_w + 
-              (spawn_point.weight - low_w) * 
-              ( (evo - low_e) / (spawn_point.evolution_factor - low_e) )
-            break
-          else
-            low_e = spawn_point.evolution_factor
-            low_w = spawn_point.weight
-          end
-        end
-        if not w then
-          w = low_w
-        end
-        if not evo_spawn[usd.unit] then
-          evo_spawn[usd.unit] = w
-        else
-          evo_spawn[usd.unit] = evo_spawn[usd.unit] + w
-        end
+        local w = hatch.weight_at(usd.spawn_points, evo)
+        evo_spawn[usd.unit] = (evo_spawn[usd.unit] or 0) + w
       end
     end
   end
@@ -91,25 +68,16 @@ end
 
 local function maybe_hatch(entity,loot_name,probability,evo_spawn)
   if math.random() < probability then
-    -- list of biters that can spawn right now and can drop this loot, with their spawn weight/probability
-    local total_weight = 0
+    -- what could come out of this artifact: everything that drops it, weighted by how
+    -- much of it that thing drops and by how likely the thing is at this evolution
     local can_spawn = {}
     for entity_name,entity_weight in pairs(loot_to_entity[loot_name]) do
       if evo_spawn[entity_name] and evo_spawn[entity_name]>0 then
         can_spawn[entity_name] = evo_spawn[entity_name] * entity_weight
-        total_weight = total_weight + evo_spawn[entity_name] * entity_weight
       end
     end
-    -- pick one of those biters at random, weighted
-    local target = math.random() * total_weight
-    local picked
-    for name,weight in pairs(can_spawn) do
-      if target < weight then
-        picked = name
-        break
-      end
-      target = target - weight
-    end
+    local picked = hatch.pick(can_spawn, math.random())
+    if not picked then return end
     -- hatch it!
     if entity.surface.create_entity{
       name=picked,
@@ -145,9 +113,7 @@ local function onTick(event)
               -- count_min and count_max is now name, independent_probability, and either
               -- a flat amount or an amount_min and amount_max pair.
               if string.find(loot.name, 'alien%-artifact') then
-                local mean = loot.amount
-                  or ((loot.amount_min + loot.amount_max) / 2)
-                local expected = (loot.independent_probability or 1) * mean
+                local expected = hatch.expected_drop(loot)
                 if not loot_to_entity[loot.name] then
                   loot_to_entity[loot.name] = {}
                 end
@@ -184,3 +150,15 @@ script.on_event(defines.events.on_tick, onTick)
 
 script.on_init(chooseOffset)
 script.on_configuration_changed(chooseOffset)
+
+--- ah-tests is never published, so this can never fire on a player's machine -- which
+--- matters, because info.json keeps test/ out of the package.
+if script.active_mods["factorio-test"] and script.active_mods["ah-tests"] then
+  require("__factorio-test__/init")({
+    "test.ft.hatching",
+    "test.ft.surfaces",
+  }, {
+    load_luassert = true,
+    game_speed = 100,
+  })
+end

@@ -1,0 +1,98 @@
+--- What happens to artifacts left lying on the ground.
+local world = require("test.ft.world")
+
+--- Two polls' worth, so a fixture is not at the mercy of which tick of the cycle the save
+--- happened to draw. The chance per poll is 5% per artifact, so with plenty of artifacts
+--- something hatches almost every time.
+local TWO_POLLS = world.POLL_TICKS * 2 + 60
+
+describe("artifacts on the ground", function()
+    it("hatch into something eventually", function()
+        local arena = world.arena(game.surfaces.nauvis)
+        world.scatter(arena, "alien-artifact", 40)
+        assert.are.equal(40, world.items(arena), "the artifacts were not laid out")
+        after_ticks(TWO_POLLS, function()
+            assert.is_true(world.hatch_count(arena) > 0,
+                "forty artifacts sat through two polls without hatching anything")
+        end)
+    end)
+
+    it("hatch into something that drops them", function()
+        local arena = world.arena(game.surfaces.nauvis)
+        world.scatter(arena, "alien-artifact", 40)
+        after_ticks(TWO_POLLS, function()
+            local hatched = world.hatched(arena)
+            assert.is_true(next(hatched) ~= nil, "nothing hatched")
+            -- ah-tests hangs artifact loot on the small and medium biter, and evolution
+            -- starts at nothing, so only the small one can appear
+            for name in pairs(hatched) do
+                assert.are.equal("small-biter", name,
+                    name .. " hatched, and only a small biter should at zero evolution")
+            end
+        end)
+    end)
+
+    it("are eaten by whatever hatches out of them", function()
+        local arena = world.arena(game.surfaces.nauvis)
+        world.scatter(arena, "alien-artifact", 40)
+        after_ticks(TWO_POLLS, function()
+            assert.is_true(world.hatch_count(arena) > 0, "nothing hatched")
+            assert.is_true(world.items(arena) < 40,
+                "something hatched but no artifacts were taken off the ground")
+        end)
+    end)
+end)
+
+describe("things that are not artifacts", function()
+    it("are left where they lie", function()
+        local arena = world.arena(game.surfaces.nauvis)
+        world.scatter(arena, "ah-tests-trinket", 40)
+        after_ticks(TWO_POLLS, function()
+            assert.are.equal(0, world.hatch_count(arena),
+                "something hatched out of an item that is not an artifact")
+            assert.are.equal(40, world.items(arena), "the trinkets were disturbed")
+        end)
+    end)
+
+    it("include ordinary items", function()
+        local arena = world.arena(game.surfaces.nauvis)
+        world.scatter(arena, "iron-plate", 40)
+        after_ticks(TWO_POLLS, function()
+            assert.are.equal(0, world.hatch_count(arena))
+            assert.are.equal(40, world.items(arena))
+        end)
+    end)
+end)
+
+describe("evolution decides what comes out", function()
+    -- ah-tests gives the medium biter artifact loot too, so once evolution is far enough
+    -- along for medium biters to be spawned, they should start appearing
+    it("lets a bigger enemy hatch once the enemy has come along", function()
+        local arena = world.arena(game.surfaces.nauvis)
+        world.evolve(arena.surface, 1.0)
+        world.scatter(arena, "alien-artifact", 40)
+        after_ticks(TWO_POLLS, function()
+            local hatched = world.hatched(arena)
+            assert.is_true(next(hatched) ~= nil, "nothing hatched at full evolution")
+            local names = {}
+            for name in pairs(hatched) do names[#names + 1] = name end
+            table.sort(names)
+            print("HATCHED at full evolution: " .. table.concat(names, ", "))
+            for name in pairs(hatched) do
+                assert.is_true(name == "small-biter" or name == "medium-biter",
+                    name .. " hatched, and only the two that drop artifacts should")
+            end
+            -- and it has to be the medium one. A fully evolved nest gives the small biter
+            -- a spawn weight of nothing, so if a small one came out then the evolution of
+            -- this surface was not what was consulted.
+            assert.is_true(hatched["medium-biter"] ~= nil,
+                "at full evolution the medium biter should be what hatches, not "
+                .. table.concat(names, ", "))
+            assert.is_nil(hatched["small-biter"],
+                "a small biter cannot be spawned at full evolution")
+        end)
+        after_ticks(TWO_POLLS + 60, function()
+            world.evolve(arena.surface, 0)
+        end)
+    end)
+end)
