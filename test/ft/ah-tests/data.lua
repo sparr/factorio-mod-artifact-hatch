@@ -32,9 +32,13 @@ local function add_loot(prototype, name, chance, low, high)
   })
 end
 
--- small biters always drop artifacts, so a test does not have to wait on a die roll
+-- Every size of biter drops artifacts, the way Schall Alien Loot does it, so that what
+-- hatches can vary with evolution rather than being decided by which two sizes happen to
+-- be loot-bearing. They always drop, so a test does not have to wait on a die roll.
 add_loot(data.raw.unit["small-biter"], ARTIFACT, 1, 1, 4)
 add_loot(data.raw.unit["medium-biter"], ARTIFACT, 1, 2, 6)
+add_loot(data.raw.unit["big-biter"], ARTIFACT, 1, 4, 10)
+add_loot(data.raw.unit["behemoth-biter"], ARTIFACT, 1, 8, 16)
 -- and a pentapod, so there is a Gleba source of artifacts. Schall Alien Loot puts them
 -- on wriggler pentapods the same way, under its "mover" heading.
 add_loot(data.raw.unit["small-wriggler-pentapod"], ARTIFACT, 1, 1, 4)

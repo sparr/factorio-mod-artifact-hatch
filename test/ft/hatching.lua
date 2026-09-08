@@ -71,34 +71,52 @@ describe("things that are not artifacts", function()
 end)
 
 describe("evolution decides what comes out", function()
-    -- ah-tests gives the medium biter artifact loot too, so once evolution is far enough
-    -- along for medium biters to be spawned, they should start appearing
-    it("lets a bigger enemy hatch once the enemy has come along", function()
+    --- The chance is a config value read at the moment of hatching, so a fixture can turn
+    --- it up and see many hatches in one poll instead of a handful.
+    local saved
+    before_each(function()
+        saved = artifact_hatching_chance
+        artifact_hatching_chance = 0.9
+    end)
+    after_each(function()
+        artifact_hatching_chance = saved
+        world.evolve(game.surfaces.nauvis, 0)
+    end)
+
+    -- at nothing evolution the small biter is the only one a nest will raise, so it is
+    -- the only thing an artifact can become however many kinds drop artifacts
+    it("gives only the smallest at no evolution", function()
+        local arena = arena_with_nest()
+        world.scatter(arena, "alien-artifact", 40)
+        after_ticks(world.POLL_TICKS + 60, function()
+            local hatched = world.hatched(arena)
+            assert.is_true(next(hatched) ~= nil, "nothing hatched")
+            for name in pairs(hatched) do
+                assert.are.equal("small-biter", name,
+                    name .. " hatched, and only a small biter should at no evolution")
+            end
+        end)
+    end)
+
+    -- and at full evolution it should be a mix of the bigger ones, not one size every
+    -- time: the pick is weighted, not decided
+    it("gives a mix of the bigger ones at full evolution", function()
         local arena = arena_with_nest()
         world.evolve(arena.surface, 1.0)
-        world.scatter(arena, "alien-artifact", 40)
-        after_ticks(TWO_POLLS, function()
+        world.scatter(arena, "alien-artifact", 60)
+        after_ticks(world.POLL_TICKS + 60, function()
             local hatched = world.hatched(arena)
-            assert.is_true(next(hatched) ~= nil, "nothing hatched at full evolution")
-            local names = {}
-            for name in pairs(hatched) do names[#names + 1] = name end
+            local names, total = {}, 0
+            for name, n in pairs(hatched) do names[#names + 1] = name; total = total + n end
             table.sort(names)
-            print("HATCHED at full evolution: " .. table.concat(names, ", "))
-            for name in pairs(hatched) do
-                assert.is_true(name == "small-biter" or name == "medium-biter",
-                    name .. " hatched, and only the two that drop artifacts should")
-            end
-            -- and it has to be the medium one. A fully evolved nest gives the small biter
-            -- a spawn weight of nothing, so if a small one came out then the evolution of
-            -- this surface was not what was consulted.
-            assert.is_true(hatched["medium-biter"] ~= nil,
-                "at full evolution the medium biter should be what hatches, not "
-                .. table.concat(names, ", "))
+            print(("HATCHED at full evolution: %s (%d in all)")
+                :format(table.concat(names, ", "), total))
+            assert.is_true(total > 4, "only " .. total .. " hatched, too few to judge by")
             assert.is_nil(hatched["small-biter"],
-                "a small biter cannot be spawned at full evolution")
-        end)
-        after_ticks(TWO_POLLS + 60, function()
-            world.evolve(arena.surface, 0)
+                "a small biter cannot be raised at full evolution")
+            assert.is_true(#names > 1,
+                "every one of " .. total .. " hatched the same way, so the pick is not "
+                .. "weighted at all: got " .. table.concat(names, ", "))
         end)
     end)
 end)
