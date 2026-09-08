@@ -1,6 +1,6 @@
 ---------------------------------------------------------------------------------------------------
 Version: 2.1.2
-Date: ????
+Date: 2026-09-08
   Features:
     - Artifacts are noticed whatever dropped them, rather than only what a unit dropped,
       so the artifacts that Alien Space Science and Schall Alien Loot hang on nests and
