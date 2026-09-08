@@ -1,0 +1,9 @@
+---------------------------------------------------------------------------------------------------
+Version: 2.1.0
+Date: 2026-09-08
+  Other:
+    - Update for Factorio 2.1
+  Changes:
+    - What hatches is now chosen from what the enemy can actually spawn on that surface.
+      Evolution belongs to a planet in 2.0, so an egg on one world no longer hatches
+      according to how far along the enemies are on another

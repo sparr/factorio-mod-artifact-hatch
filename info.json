@@ -3,9 +3,13 @@
   "version": "0.13.0",
   "title": "Artifact Hatch",
   "author": "Sparr",
-  "homepage": "http://github.com/sparr/factorio-mod-artifact-hatch",
+  "homepage": "https://github.com/sparr/factorio-mod-artifact-hatch",
   "contact": "sparr0@gmail.com",
   "description": "Alien artifacts are actually alien eggs! Deal with them before they hatch.",
-  "dependencies": ["base >= 0.13.0"],
-  "factorio_version": "0.13"
+  "dependencies": [
+    "base >= 2.1.0",
+    "(?)SchallAlienLoot",
+    "(?)AlienSpaceScience"
+  ],
+  "factorio_version": "2.1"
 }
