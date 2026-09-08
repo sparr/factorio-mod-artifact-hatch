@@ -9,6 +9,7 @@
   "description": "An alien artifact item, and biters that drop it, standing in for SchallAlienLoot and AlienSpaceScience so the suite has artifacts to hatch. Its presence is also what tells Artifact Hatch to register its tests, so they can never run on a player's machine. Published with the mod's source on GitHub, but never to the mod portal.",
   "dependencies": [
     "base",
+    "? space-age",
     "artifact-hatch"
   ]
 }

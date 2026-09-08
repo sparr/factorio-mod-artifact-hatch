@@ -1,4 +1,18 @@
 ---------------------------------------------------------------------------------------------------
+Version: 2.1.2
+Date: ????
+  Features:
+    - Artifacts are noticed whatever dropped them, rather than only what a unit dropped,
+      so the artifacts that Alien Space Science and Schall Alien Loot hang on nests and
+      worms are found too
+    - What hatches belongs to the world the artifact is lying on. A Nauvis biter can no
+      longer come out of an artifact on Gleba, and nothing hatches at all on a planet
+      with no enemies of its own
+    - A nest's artifact hatches into one of that nest's brood rather than into another
+      nest
+    - Whatever hatches comes out newly born where the game has such a form, so an
+      artifact from a pentapod gives a premature wriggler
+---------------------------------------------------------------------------------------------------
 Version: 2.1.1
 Date: 2026-09-08
   Other:

@@ -123,3 +123,104 @@ describe("choosing what comes out", function()
         assert.is_not_nil(hatch.pick({ a = 1, b = 1 }, 1.0))
     end)
 end)
+
+describe("the newborn form of an enemy", function()
+    local HAVE = {
+        ["small-wriggler-pentapod"] = true,
+        ["small-wriggler-pentapod-premature"] = true,
+        ["small-biter"] = true,
+    }
+    local function exists(name) return HAVE[name] == true end
+
+    -- what the game itself puts down when a pentapod egg spoils
+    it("is the premature one where the game has one", function()
+        assert.are.equal("small-wriggler-pentapod-premature",
+            hatch.newborn("small-wriggler-pentapod", exists))
+    end)
+
+    it("is the enemy itself where it has no premature form", function()
+        assert.are.equal("small-biter", hatch.newborn("small-biter", exists))
+    end)
+end)
+
+describe("what can come out of an artifact", function()
+    --- Nauvis: a biter nest raising biters, and a worm that stands alone
+    local function nauvis_about(name)
+        if name == "biter-spawner" then
+            return "unit-spawner", { "small-biter", "medium-biter" }
+        elseif name == "small-worm-turret" then
+            return "turret", nil
+        elseif name == "small-biter" or name == "medium-biter" then
+            return "unit", nil
+        end
+        return nil, nil
+    end
+    local NAUVIS = {
+        structures = { ["biter-spawner"] = true, ["small-worm-turret"] = true },
+        units = { ["small-biter"] = 100, ["medium-biter"] = 50 },
+    }
+
+    it("is the nest's own brood, not the nest", function()
+        local weights = hatch.candidates({ ["biter-spawner"] = 4 }, nauvis_about, NAUVIS)
+        assert.is_nil(weights["biter-spawner"], "a nest should not hatch out of an egg")
+        assert.are.equal(400, weights["small-biter"])
+        assert.are.equal(200, weights["medium-biter"])
+    end)
+
+    it("is the unit itself when a unit dropped it", function()
+        local weights = hatch.candidates({ ["small-biter"] = 2 }, nauvis_about, NAUVIS)
+        assert.are.equal(200, weights["small-biter"])
+    end)
+
+    -- a worm raises nothing, so there is nothing for its artifact to be but another worm
+    it("is a worm itself when a worm dropped it", function()
+        local weights = hatch.candidates({ ["small-worm-turret"] = 3 }, nauvis_about, NAUVIS)
+        assert.are.equal(3, weights["small-worm-turret"])
+    end)
+
+    it("adds up when several things drop the same artifact", function()
+        local weights = hatch.candidates(
+            { ["biter-spawner"] = 1, ["small-biter"] = 1 }, nauvis_about, NAUVIS)
+        assert.are.equal(200, weights["small-biter"])
+        assert.are.equal(50, weights["medium-biter"])
+    end)
+
+    --- Gleba: its own nests, and nothing of Nauvis about it
+    local function gleba_about(name)
+        if name == "gleba-spawner" then
+            return "unit-spawner", { "small-wriggler-pentapod" }
+        elseif name == "biter-spawner" then
+            return "unit-spawner", { "small-biter" }
+        end
+        return nil, nil
+    end
+    local GLEBA = {
+        structures = { ["gleba-spawner"] = true },
+        units = { ["small-wriggler-pentapod"] = 300 },
+    }
+
+    it("leaves out a Nauvis biter when the artifact is lying on Gleba", function()
+        local weights = hatch.candidates(
+            { ["gleba-spawner"] = 9, ["biter-spawner"] = 9 }, gleba_about, GLEBA)
+        assert.is_nil(weights["small-biter"],
+            "a Nauvis biter should not come out of an egg on Gleba")
+        assert.are.equal(2700, weights["small-wriggler-pentapod"])
+    end)
+
+    it("leaves out a worm that does not stand on this surface", function()
+        local weights = hatch.candidates(
+            { ["small-worm-turret"] = 3 }, nauvis_about,
+            { structures = {}, units = {} })
+        assert.are.same({}, weights)
+    end)
+
+    it("offers nothing at all where nothing belongs", function()
+        local barren = { structures = {}, units = {} }
+        assert.are.same({}, hatch.candidates({ ["biter-spawner"] = 4 }, nauvis_about, barren))
+    end)
+
+    it("skips a source the game does not have", function()
+        assert.are.same({},
+            hatch.candidates({ ["no-such-thing"] = 4 }, nauvis_about, NAUVIS))
+    end)
+end)

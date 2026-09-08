@@ -83,4 +83,54 @@ function hatch.pick(weights, roll)
   return names[#names]
 end
 
+---The newborn form of an enemy, if the game has one.
+---
+---Space Age ships small, medium and big wriggler pentapods with a -premature counterpart
+---each, and that is what the game itself puts down when a pentapod egg spoils. Something
+---coming out of an egg is newly hatched, so the premature form is the right one wherever
+---it exists. The lookup is passed in so this can be checked without a game.
+---@param name string
+---@param exists fun(name: string): boolean
+---@return string
+function hatch.newborn(name, exists)
+  local premature = name .. "-premature"
+  if exists(premature) then return premature end
+  return name
+end
+
+---What could come out of an artifact, and how heavily each is favoured.
+---
+---A source is anything that drops the artifact. What hatches is not the source itself
+---unless there is nothing better: a nest's egg hatches into one of the nest's own brood,
+---because that is what was in it. A worm has no brood, so a worm's artifact hatches a
+---worm.
+---
+---Everything is then held to what belongs on the surface in question, which is the whole
+---point: a Nauvis biter has no business coming out of an egg lying on Gleba.
+---@param sources table<string, number> source prototype name to how much it drops
+---@param about fun(name: string): string?, string[]? the source's type, and its brood
+---@param native {structures: table<string, boolean>, units: table<string, number>}
+---@return table<string, number>
+function hatch.candidates(sources, about, native)
+  local weights = {}
+  local function offer(name, weight)
+    if weight and weight > 0 then weights[name] = (weights[name] or 0) + weight end
+  end
+  for source, expected in pairs(sources) do
+    local kind, brood = about(source)
+    if kind == "unit-spawner" and brood then
+      -- the nest's own brood, each as likely as the nest is to raise it here
+      for _, unit in pairs(brood) do
+        offer(unit, expected * (native.units[unit] or 0))
+      end
+    elseif kind == "unit" then
+      offer(source, expected * (native.units[source] or 0))
+    elseif native.structures[source] then
+      -- a worm, or anything else that stands still and has no brood
+      offer(source, expected)
+    end
+  end
+  return weights
+end
+
 return hatch

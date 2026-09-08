@@ -47,37 +47,61 @@ end
 
 local loot_to_entity
 
---- What the enemy can spawn on one surface right now, by unit name and weight.
+--- What belongs on one surface: the enemy structures the world places there, and the
+--- units those structures raise, weighted by how far along that surface's evolution is.
 ---
---- 2.0 took away game.evolution_factor: evolution belongs to a force on a surface, so
---- this has to be asked and answered per surface rather than once for the whole game. A
---- nest on Gleba and a nest on Nauvis are at different points of their own evolution.
-local function spawnable_on(surface)
-  local evo_spawn = {}
+--- Read off the map's own generation settings rather than off the nests standing about,
+--- because there need not be any: a player who has cleared the map still has artifacts,
+--- and they should still hatch into something of that world. Nauvis places its enemies
+--- under the "enemy-base" control and Gleba under "gleba_enemy_base"; a spawner or worm
+--- prototype names the control that places it, so the two meet in the middle. Vulcanus,
+--- Fulgora and Aquilo name no enemy control at all, and nothing hatches there.
+---
+--- 2.0 took away game.evolution_factor: evolution belongs to a force on a surface, so a
+--- nest on Gleba and a nest on Nauvis are at different points of their own.
+---@param surface LuaSurface
+---@return {structures: table<string, boolean>, units: table<string, number>}
+local function natives_of(surface)
+  local controls = surface.map_gen_settings.autoplace_controls or {}
+  local structures, units = {}, {}
   local evo = game.forces.enemy.get_evolution_factor(surface)
-  for _,entity in pairs(prototypes.entity) do
-    if entity.type == "unit-spawner" then
-      for _,usd in pairs(entity.result_units) do
-        local w = hatch.weight_at(usd.spawn_points, evo)
-        evo_spawn[usd.unit] = (evo_spawn[usd.unit] or 0) + w
+  for name,proto in pairs(prototypes.entity) do
+    -- only the kinds of thing an enemy is; a rock is placed by a control too
+    if proto.type == "unit-spawner" or proto.type == "turret" or proto.type == "unit" then
+      local spec = proto.autoplace_specification
+      if spec and spec.control and controls[spec.control] then
+        structures[name] = true
+        if proto.type == "unit-spawner" then
+          for _,usd in pairs(proto.result_units) do
+            units[usd.unit] = (units[usd.unit] or 0) + hatch.weight_at(usd.spawn_points, evo)
+          end
+        end
       end
     end
   end
-  return evo_spawn
+  return { structures = structures, units = units }
 end
 
-local function maybe_hatch(entity,loot_name,probability,evo_spawn)
+--- The type of a source and, if it raises any, its brood
+local function about_source(name)
+  local proto = prototypes.entity[name]
+  if not proto then return nil, nil end
+  if proto.type ~= "unit-spawner" then return proto.type, nil end
+  local brood = {}
+  for _,usd in pairs(proto.result_units) do brood[#brood + 1] = usd.unit end
+  return proto.type, brood
+end
+
+local function exists(name) return prototypes.entity[name] ~= nil end
+
+local function maybe_hatch(entity,loot_name,probability,native)
   if math.random() < probability then
-    -- what could come out of this artifact: everything that drops it, weighted by how
-    -- much of it that thing drops and by how likely the thing is at this evolution
-    local can_spawn = {}
-    for entity_name,entity_weight in pairs(loot_to_entity[loot_name]) do
-      if evo_spawn[entity_name] and evo_spawn[entity_name]>0 then
-        can_spawn[entity_name] = evo_spawn[entity_name] * entity_weight
-      end
-    end
-    local picked = hatch.pick(can_spawn, math.random())
+    local weights = hatch.candidates(loot_to_entity[loot_name], about_source, native)
+    local picked = hatch.pick(weights, math.random())
     if not picked then return end
+    -- whatever comes out of an egg is newly hatched, so the premature form of it if the
+    -- game has one. This is what vanilla does when a pentapod egg spoils.
+    picked = hatch.newborn(picked, exists)
     -- hatch it!
     if entity.surface.create_entity{
       name=picked,
@@ -102,18 +126,18 @@ local function onTick(event)
   if event.tick%artifact_polling_delay == storage.polling_remainder%artifact_polling_delay then
 
     -- initialization code, runs once
-    -- make a mapping from each loot item to how likely each entity name is to drop it
+    -- make a mapping from each artifact to how much of it each thing drops
     if not loot_to_entity then
       loot_to_entity = {}
       for name,entity in pairs(prototypes.entity) do
-        if entity.type == "unit" then
-          if entity.loot then
-            for _,loot in pairs(entity.loot) do
-              -- 2.0 turned a loot entry into an ItemProduct: what was item, probability,
-              -- count_min and count_max is now name, independent_probability, and either
-              -- a flat amount or an amount_min and amount_max pair.
-              if string.find(loot.name, 'alien%-artifact') then
-                local expected = hatch.expected_drop(loot)
+        -- Anything at all that drops an artifact counts as a source. Until 2.1.2 this
+        -- only looked at units, which meant it saw nothing of AlienSpaceScience, whose
+        -- artifacts come off spawners and worms.
+        if entity.loot then
+          for _,loot in pairs(entity.loot) do
+            if string.find(loot.name, 'alien%-artifact') then
+              local expected = hatch.expected_drop(loot)
+              if expected > 0 then
                 if not loot_to_entity[loot.name] then
                   loot_to_entity[loot.name] = {}
                 end
@@ -126,19 +150,19 @@ local function onTick(event)
       end
     end
 
-    -- worked out once per surface per poll, since asking is not cheap
-    local spawnable = {}
+    -- worked out once per surface per poll, since asking the surface is not cheap
+    local native = {}
 
     for _,entity in pairs(find_all_entities{name="item-on-ground"}) do
       if entity.valid then
         local index = entity.surface.index
-        if not spawnable[index] then spawnable[index] = spawnable_on(entity.surface) end
+        if not native[index] then native[index] = natives_of(entity.surface) end
         if loot_to_entity[entity.stack.name] then
           -- direct loot hatches as expected
-          maybe_hatch(entity,entity.stack.name,artifact_hatching_chance,spawnable[index])
+          maybe_hatch(entity,entity.stack.name,artifact_hatching_chance,native[index])
         elseif loot_to_entity['small-' .. entity.stack.name] then
           -- if nothing drops this loot, see if something drops the small version, and spawn that a bit quicker
-          maybe_hatch(entity,'small-' .. entity.stack.name,1-((1-artifact_hatching_chance)^2),spawnable[index])
+          maybe_hatch(entity,'small-' .. entity.stack.name,1-((1-artifact_hatching_chance)^2),native[index])
         end
       end
     end
@@ -157,6 +181,7 @@ if script.active_mods["factorio-test"] and script.active_mods["ah-tests"] then
   require("__factorio-test__/init")({
     "test.ft.hatching",
     "test.ft.surfaces",
+    "test.ft.planets",
   }, {
     load_luassert = true,
     game_speed = 100,
